@@ -9,6 +9,15 @@
 \setbeamercolor{alerted text}{fg=AUred}
 \usetheme[progressbar=frametitle, sectionpage=progressbar]{metropolis}
 
+
+\RequirePackage{etoolbox}
+\RequirePackage{keyval}
+\RequirePackage{calc}
+\RequirePackage{pgfopts}
+\RequirePackage{tikz}
+
+
+
 \title{A Compositional Deadlock Detector for Android Java}
 \date{\today}
 \author{Darius Mure\c{s}an \and Henrique Luz \and Rui Xavier}
@@ -47,6 +56,7 @@
 
 \begin{frame}{Classical Example}
   \begin{block}{Dijkstra’s Dining Philosophers}
+    \vspace{0.3em}
     Five philosophers share forks and a bowl of spaghetti.  
     Each must hold two forks to eat — potential for a circular wait.
   \end{block}
@@ -65,6 +75,7 @@
   \end{itemize}
   \vspace{0.7em}
   \begin{block}{Goal}
+    \vspace{0.3em}
     \textbf{Fast, scalable, accurate deadlock detection} integrated into CI pipelines.
   \end{block}
 \end{frame}
@@ -90,6 +101,7 @@
   \end{itemize}
   \vspace{0.5em}
   \begin{alertblock}{Core Challenge}
+    \vspace{0.3em}
     Can we design a deadlock detector that is both
     \textbf{sound in theory} and \textbf{scalable in practice}?
   \end{alertblock}
@@ -97,6 +109,7 @@
 
 \begin{frame}{Research Question}
   \begin{block}{Main Question}
+    \vspace{0.3em}
     Can we develop a \textbf{compositional deadlock detector}
     for \textbf{Android Java} that is sound, complete, and efficient
     for large industrial codebases?
@@ -132,6 +145,7 @@
     \item Ensures locks are \textbf{re-entrant and scoped}.
   \end{itemize}
   \begin{exampleblock}{Example}
+    \vspace{0.3em}
   \texttt{acq(x); acq(y); rel(y); rel(x)}   Balanced  
   \texttt{acq(x); rel(y);}  Unbalanced
   \end{exampleblock}
@@ -148,6 +162,7 @@
   \]
   \vspace{0.5em}
   \begin{block}{Key Idea}
+    \vspace{0.3em}
     Deadlock arises when threads hold disjoint locks yet each waits on
     a lock held by another.
   \end{block}
@@ -171,6 +186,7 @@
 
 \begin{frame}{Example Trace}
   \begin{exampleblock}{Example}
+    \vspace{0.3em}
     \texttt{acq(x); if(*) then acq(y); rel(y); else acq(z); rel(z); rel(x)}  
     \[
     L(C) = \{\, x y y x,\, x z z x \,\}
@@ -197,6 +213,7 @@
 
 \begin{frame}{Deadlock Characterisation}
   \begin{block}{Critical Pair}
+    \vspace{0.3em}
     \((X, \ell)\): some execution acquires lock \(\ell\)
     while holding all locks in \(X\).
   \end{block}
@@ -208,6 +225,7 @@
 
 \begin{frame}{Key Theorem (Simplified)}
   \begin{block}{Theorem 4.4 — Deadlock Condition}
+    \vspace{0.3em}
     Program \( C_1 || ... || C_n \) deadlocks  
     iff there exist critical pairs \((X_i, \ell_i)\) s.t.
     \[
@@ -222,6 +240,7 @@
 
 \begin{frame}{Illustrative Example}
   \begin{exampleblock}{Two-Thread Example}
+    \vspace{0.3em}
   \texttt{C1: acq(x); acq(y); rel(y); rel(x)}  
   \texttt{C2: acq(y); acq(x); rel(x); rel(y)}
   \end{exampleblock}
@@ -242,6 +261,7 @@
           \textbf{complete} (no spurious ones).
   \end{itemize}
   \begin{block}{Result}
+    \vspace{0.3em}
     Existence of deadlock <=> conflict between critical pairs.
   \end{block}
 \end{frame}
@@ -282,6 +302,7 @@
     \item Compositionally reuses summaries of unchanged methods.
   \end{itemize}
   \begin{block}{Core Idea}
+    \vspace{0.3em}
     Analyse only modified methods and their dependents.
   \end{block}
 \end{frame}
@@ -368,6 +389,7 @@
     \item Formalized and proven in \textbf{Coq (8.7k LOC)}.
   \end{itemize}
   \begin{block}{Future Work}
+    \vspace{0.3em}
     Extend to recursive calls, deterministic control, and nested parallelism.
   \end{block}
 \end{frame}
