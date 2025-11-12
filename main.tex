@@ -17,13 +17,23 @@
 \RequirePackage{tikz}
 
 
-
 \title{A Compositional Deadlock Detector for Android Java}
 \date{\today}
 \author{Darius Mure\c{s}an \and Henrique Luz \and Rui Xavier}
 \institute{Aarhus University \\ Department of Computer Science}
 
 \begin{document}
+
+\newcommand{\nbnote}[3]{
+  % \fbox{\bfseries\sffamily\scriptsize#1}
+  \fcolorbox{gray}{yellow}{\bfseries\sffamily\scriptsize#1}
+  {\color{#2} \sffamily\small$\blacktriangleright$\textit{#3}$\blacktriangleleft$}
+  % {\color{#2} \sffamily\small$\textit{#3}$}
+  % \marginpar{\fbox{\bfseries\sffamily#1}}
+}
+\newcommand{\darius}[1]{\nbnote{Darius}{red}{#1}}
+\newcommand{\rui}[1]{\nbnote{Rui}{blue}{#1}} %
+\newcommand{\henrique}[1]{\nbnote{Henrique}{green}{#1}} %
 
 % --- Title ---
 \maketitle
@@ -55,7 +65,7 @@
 \end{frame}
 
 \begin{frame}{Classical Example}
-  \begin{block}{Dijkstra’s Dining Philosophers}
+  \begin{block}{Dijkstra's Dining Philosophers}
     \vspace{0.3em}
     Five philosophers share forks and a bowl of spaghetti.  
     Each must hold two forks to eat — potential for a circular wait.
@@ -126,34 +136,28 @@
 % =========================================================
 
 \begin{frame}{Abstract Language}
+  \rui{Is this too much text for one slide?}
   \begin{itemize}
     \item Simplified model of Java concurrency:
-    \[
-      C ::= \texttt{skip} \mid \texttt{p()} \mid \texttt{acq}(\ell) \mid \texttt{rel}(\ell)
-      \mid C;C \mid \texttt{if(*) then C else C} \mid \texttt{while(*) do C}
-    \]
-    \item Non-recursive procedures.
-    \item \textbf{Balanced statements}: every \texttt{acq} has matching \texttt{rel}.
-    \item Parallel program: \( C_1 \,||\, C_2 \,||\, ... \,||\, C_n \)
+    \begin{align*}
+      C ::= \texttt{skip} \mid \texttt{p()} \mid \texttt{acq(l);C;rel(l)} \mid \texttt{C;C} \\ \mid \texttt{if(*) then C else C} \mid \texttt{while(*) do C} \\
+    \end{align*}
+    \item This grammar guarantees balanced pairs of lock acquisitions/releases.
+    \item We consider only non-recursive procedures.
+    \item If $C$ is balanced, then so is body($p$) with $p \in$ callees(C).
+    \item A parallel program is an n-tuple of balanced statements \( C_1 \,||\, C_2 \,||\, ... \,||\, C_n \).
   \end{itemize}
 \end{frame}
 
-\begin{frame}{Balanced (Nested) Locks}
+\begin{frame}{Lock States}
   \begin{itemize}
-    \item Threads acquire and release locks in \textbf{LIFO} order.
-    \item Corresponds to \texttt{synchronized} in Java.
-    \item Ensures locks are \textbf{re-entrant and scoped}.
+    \item We treat locks as \textbf{re-entrant and scoped}.
   \end{itemize}
-  \begin{exampleblock}{Example}
-    \vspace{0.3em}
-  \texttt{acq(x); acq(y); rel(y); rel(x)}   Balanced  
-  \texttt{acq(x); rel(y);}  Unbalanced
-  \end{exampleblock}
 \end{frame}
 
 \begin{frame}{Semantics}
   \begin{itemize}
-    \item Each thread has a \textbf{lock state}: mapping locks → acquisition counts.
+    \item Each thread has a \textbf{lock state} which maps locks to acquisition counts.
     \item Deadlock occurs when every thread can take a local step,
           but no joint step is possible.
   \end{itemize}
