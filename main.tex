@@ -131,17 +131,76 @@
   \end{itemize}
 \end{frame}
 
+\section{Critical Pairs and Deadlock Detection}
+
+\begin{frame}{Critical Pairs}
+    \rui{Is this too much text for one slide?}
+  \begin{block}{Definition}
+    \vspace{0.3em}
+    A \textbf{critical pair} of a thread is a pair \((X, \ell)\) such that some
+execution of the thread acquires an unheld lock \(\ell\) while already
+holding the set of locks \(X\).
+  \end{block}
+  \begin{block}{Deadlock Condition}
+    \vspace{0.3em}
+    For the case of two threads:
+    \begin{align*}
+    C1 \mid \mid C2 \quad deadlocks \iff \text{there are critical pairs } \\ (X1, \ \ell1) \text{ and } (X2, \ \ell2) \text{ of C1 and C2 respectively, such that:}
+    \end{align*}
+    \[
+    \ell1 \in X2 \quad and \quad \ell2 \in X1 \quad and \quad X1 \cap X2 = \emptyset
+    \]
+  \end{block}
+\end{frame}
+
+\begin{frame}{Example of Critical Pairs}
+  \begin{exampleblock}{Example}
+    \vspace{0.3em}
+    Consider the two threads:
+    \begin{align*}
+    C1: acq(x); acq(y); skip; rel(y); rel(x) \\
+    C2: acq(y); acq(x); skip; rel(x); rel(y)
+    \end{align*}
+    Their critical pairs are:
+    \begin{align*}
+    Crit(C1) = \{(\emptyset, x), (\{x\}, y)\} \\
+    Crit(C2) = \{(\emptyset, y), (\{y\}, x)\}
+    \end{align*}
+  \end{exampleblock}
+  Since \(x \in \{x\}\), \(y \in \{y\}\) and \(\{x\} \cap \{y\} = \emptyset\), the deadlock condition holds — \alert{deadlock!}
+
+\end{frame}
+
+\begin{frame}{Example of Critical Pairs}
+  \begin{exampleblock}{Solution}
+    \vspace{0.3em}
+    Consider the two threads:
+    \begin{align*}
+    C1': acq(z); C1; rel(z) \\
+    C2': acq(z); C2; rel(z)
+    \end{align*}
+    Their critical pairs are:
+    \begin{align*}
+    Crit(C1') = \{(\emptyset, z), (\{z\}, x)\}, (\{z,x\}, y)\} \\
+    Crit(C2') = \{(\emptyset, z), (\{z\}, y)\}, (\{z,y\}, x)\}
+    \end{align*}
+  \end{exampleblock}
+  \vspace{-1em}
+  Since \(\{z,x\} \cap \{z,y\} = z\), the deadlock condition does not hold — \alert{no deadlock!} \\
+  \(z\) acts as a guard lock, preventing x and y from being accessed by C1' and C2' simultaneously.
+\end{frame}
+
 % =========================================================
 \section{Concurrent Programs}
 % =========================================================
 
 \begin{frame}{Abstract Language}
-  \rui{Is this too much text for one slide?}
   \begin{itemize}
     \item Simplified model of Java concurrency:
     \begin{align*}
-      C ::= \texttt{skip} \mid \texttt{p()} \mid \texttt{acq(l);C;rel(l)} \mid \texttt{C;C} \\ \mid \texttt{if(*) then C else C} \mid \texttt{while(*) do C} \\
+      C ::= \texttt{skip} \mid \texttt{p()} \mid acq(\ell);C;rel(\ell) \mid \texttt{C;C} \\ \mid \texttt{if(*) then C else C} \mid \texttt{while(*) do C} \\
     \end{align*}
+    \vspace{-3em}
     \item This grammar guarantees balanced pairs of lock acquisitions/releases.
     \item We consider only non-recursive procedures.
     \item If $C$ is balanced, then so is body($p$) with $p \in$ callees(C).
@@ -149,32 +208,19 @@
   \end{itemize}
 \end{frame}
 
-\begin{frame}{Lock States}
-  \begin{itemize}
-    \item We treat locks as \textbf{re-entrant and scoped}.
-  \end{itemize}
-\end{frame}
-
-\begin{frame}{Semantics}
-  \begin{itemize}
-    \item Each thread has a \textbf{lock state} which maps locks to acquisition counts.
-    \item Deadlock occurs when every thread can take a local step,
-          but no joint step is possible.
-  \end{itemize}
-  \[
-  \langle C_1 || C_2, (L_1, L_2) \rangle
-  \]
-  \vspace{0.5em}
-  \begin{block}{Key Idea}
-    \vspace{0.3em}
-    Deadlock arises when threads hold disjoint locks yet each waits on
-    a lock held by another.
-  \end{block}
-\end{frame}
-
 % =========================================================
 \section{Program Execution Traces}
 % =========================================================
+
+
+\begin{frame}{Lock States}
+  \begin{itemize}
+    \item We treat locks as \textbf{re-entrant and scoped}.
+    \item A $lock$ $state$ is a function that maps each lock to its acquisition count.
+    \item A $configuration$ is a pair $\langle C,L \rangle$, where $C$ is a statement and $L$ is the lock state.
+    \item A $concurrent$ $configuration$ is then, a pair of the form $\langle C_1 || ... || C_n, (L_1, ..., L_n) \rangle$.
+  \end{itemize}
+\end{frame}
 
 \begin{frame}{Executions as Traces}
   \begin{itemize}
