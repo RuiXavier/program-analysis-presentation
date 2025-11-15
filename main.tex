@@ -3,6 +3,8 @@
 \usepackage{xcolor}
 \usepackage{amsmath}
 \usepackage{listings}
+\usepackage{verbatim}
+\usepackage{stmaryrd}
 
 % --- Custom styling ---
 \definecolor{AUred}{HTML}{9E1B32}
@@ -30,7 +32,7 @@
   {\color{#2} \sffamily\small$\blacktriangleright$\textit{#3}$\blacktriangleleft$}
   % {\color{#2} \sffamily\small$\textit{#3}$}
   % \marginpar{\fbox{\bfseries\sffamily#1}}
-}
+} 
 \newcommand{\darius}[1]{\nbnote{Darius}{red}{#1}}
 \newcommand{\rui}[1]{\nbnote{Rui}{blue}{#1}} %
 \newcommand{\henrique}[1]{\nbnote{Henrique}{green}{#1}} %
@@ -38,64 +40,58 @@
 % --- Title ---
 \maketitle
 
-% =========================================================
-\section{Overview}
-% =========================================================
-
-\begin{frame}{Overview}
-  \begin{itemize}
-    \item We present a \textbf{compositional static analysis} for detecting deadlocks in Android Java.
-    \item Designed for \textbf{industrial-scale} codebases (tens of millions of lines).
-    \item Implemented in \textbf{INFER}, deployed at Facebook for 2+ years.
-    \item Achieves a \textbf{54\% developer fix rate}.
-  \end{itemize}
-\end{frame}
-
-% =========================================================
+%=========================================================
 \section{Motivation}
-% =========================================================
+%=========================================================
 
-\begin{frame}{Why Study Deadlocks?}
+\begin{frame}{Why Deadlocks Matter}
   \begin{itemize}
-    \item Deadlocks are a key challenge in concurrent programming.
-    \item Occur when threads \alert{cyclically wait on each other’s locks}.
-    \item Result: entire system halts — loss of responsiveness, reliability.
-    \item Especially relevant for \textbf{Android apps} using Java’s \texttt{synchronized} blocks.
+    \item Concurrency is everywhere in Android apps:
+      \begin{itemize}
+        \item UI thread + many background threads
+        \item Callback-driven, event-based execution
+        \item Shared mutable state (objects used as locks)
+      \end{itemize}
+    \item A \alert{deadlock} freezes part (or all) of the app:
+      \begin{itemize}
+        \item UI becomes unresponsive
+        \item Background tasks never finish
+        \item Users perceive the app as \emph{broken}
+      \end{itemize}
+    \item Avoiding and detecting deadlocks is a core reliability problem.
   \end{itemize}
 \end{frame}
 
-\begin{frame}{Classical Example}
-  \begin{block}{Dijkstra's Dining Philosophers}
-    \vspace{0.3em}
-    Five philosophers share forks and a bowl of spaghetti.  
-    Each must hold two forks to eat — potential for a circular wait.
-  \end{block}
+\begin{frame}{Industrial Setting: Facebook Android Apps}
   \begin{itemize}
-    \item Illustrates the essential nature of deadlock: mutual waiting.
-    \item Analogous to threads waiting for locks.
+    \item Target: large Android apps under continuous development:
+      \begin{itemize}
+        \item Tens of millions of lines of code (LoC)
+        \item Thousands of revisions per day
+      \end{itemize}
+    \item Goal of the analysis:
+      \begin{itemize}
+        \item Run at code-review time on every commit
+        \item Give feedback to developers \textbf{within minutes}
+      \end{itemize}
+    \item This rules out whole-program, from-scratch analyses for every change.
   \end{itemize}
 \end{frame}
 
-\begin{frame}{Deadlocks in Industry}
+\begin{frame}{Key Challenges}
   \begin{itemize}
-    \item At Facebook, Android apps exceed \textbf{10M+ lines of code}.
-    \item Thousands of commits daily $\Rightarrow$ rapid iteration.
-    \item Developers need feedback in \textbf{under 15 minutes}.
-    \item Whole-program analyses are too slow and memory-intensive.
-  \end{itemize}
-  \vspace{0.7em}
-  \begin{block}{Goal}
-    \vspace{0.3em}
-    \textbf{Fast, scalable, accurate deadlock detection} integrated into CI pipelines.
-  \end{block}
-\end{frame}
-
-\begin{frame}{Challenges in Traditional Analyses}
-  \begin{itemize}
-    \item Reanalyze entire program on each commit.
-    \item Poor scalability and high false-positive rates.
-    \item Lack \textbf{compositionality}.
-    \item Need: an analysis that focuses only on changed code and its dependencies.
+    \item \textbf{Scalability}:
+      \begin{itemize}
+        \item Cannot re-analyse the whole app for each commit
+        \item Need a compositional, incremental analysis
+      \end{itemize}
+    \item \textbf{Usefulness for developers}:
+      \begin{itemize}
+        \item Too many false positives \(\Rightarrow\) warnings are ignored
+        \item The focus is on \alert{actionable reports}, not proving absence of deadlocks
+      \end{itemize}
+    \item \textbf{The research question}: can we get both \textbf{theoretical guarantees}
+      and \textbf{practical performance} at this scale?
   \end{itemize}
 \end{frame}
 
@@ -103,108 +99,189 @@
 \section{Research Gap and Question}
 % =========================================================
 
-\begin{frame}{The Research Gap}
+\begin{frame}{Limitations of Existing Approaches}
   \begin{itemize}
-    \item Existing tools are \textbf{non-compositional}.
-    \item They often trade soundness for scalability.
-    \item We need a \textbf{mathematically grounded}, \textbf{incremental} analysis.
+    \item Many existing deadlock analyses:
+      \begin{itemize}
+        \item Assume access to the \textbf{whole program}
+        \item Do not support compositional, change-focused analysis
+      \end{itemize}
+    \item Tools often prioritise:
+      \begin{itemize}
+        \item Strong soundness guarantees
+        \item But with high false-positive rates in practice
+      \end{itemize}
+    \item For huge codebases, this is misaligned with developer needs:
+      \begin{itemize}
+        \item Developers prefer fewer, more trustworthy warnings
+        \item It is acceptable to miss some rare deadlocks
+      \end{itemize}
   \end{itemize}
-  \vspace{0.5em}
-  \begin{alertblock}{Core Challenge}
-    \vspace{0.3em}
-    Can we design a deadlock detector that is both
-    \textbf{sound in theory} and \textbf{scalable in practice}?
-  \end{alertblock}
 \end{frame}
 
-\begin{frame}{Research Question}
+\begin{frame}{Research Question and Contributions}
   \begin{block}{Main Question}
-    \vspace{0.3em}
-    Can we develop a \textbf{compositional deadlock detector}
-    for \textbf{Android Java} that is sound, complete, and efficient
-    for large industrial codebases?
+    Can we design a \textbf{compositional} static analysis for \textbf{Android Java}
+    that detects deadlocks in large codebases, with:
+    \begin{itemize}
+      \item A clean \textbf{theoretical characterisation} of deadlocks
+      \item A \textbf{decidable} and \textbf{tractable} core problem
+      \item A practical implementation integrated in CI
+    \end{itemize}
+  \end{block}
+
+  \begin{block}{High-Level Contributions}
+    \begin{itemize}
+      \item Abstract language with balanced re-entrant locks and nondeterministic control
+      \item New deadlock condition based on \alert{critical pairs} of threads
+      \item Proof that deadlock detection in this language is decidable and in NP
+      \item Compositional implementation in Facebook's \texttt{INFER}, deployed at scale
+    \end{itemize}
+  \end{block}
+\end{frame}
+
+% =========================================================
+\section{Critical Pairs and Deadlock Detection}
+% =========================================================
+
+\begin{frame}{Intuition: Critical Pairs}
+  \begin{block}{Critical Pair (Informal)}
+    A \textbf{critical pair} of a thread is a pair \((X,\ell)\) such that
+    some execution of the thread acquires an \emph{unheld} lock \(\ell\)
+    while already holding exactly the set of locks \(X\).
   \end{block}
   \begin{itemize}
-    \item Model Java concurrency with \textbf{balanced, re-entrant locks}.
-    \item Detect deadlocks via \textbf{critical pairs}.
-    \item Integrate into \textbf{INFER} for continuous integration.
+    \item Captures \alert{which locks are held} when a new lock is acquired.
+    \item Abstracts away the concrete control-flow and interleavings.
+    \item Each thread has a \textbf{finite} set of critical pairs.
   \end{itemize}
 \end{frame}
 
-\section{Critical Pairs and Deadlock Detection}
-
-\begin{frame}{Critical Pairs}
-    \rui{Is this too much text for one slide?}
-  \begin{block}{Definition}
-    \vspace{0.3em}
-    A \textbf{critical pair} of a thread is a pair \((X, \ell)\) such that some
-execution of the thread acquires an unheld lock \(\ell\) while already
-holding the set of locks \(X\).
-  \end{block}
-  \begin{block}{Deadlock Condition}
-    \vspace{0.3em}
-    For the case of two threads:
-    \begin{align*}
-    C1 \mid \mid C2 \quad deadlocks \iff \text{there are critical pairs } \\ (X1, \ \ell1) \text{ and } (X2, \ \ell2) \text{ of C1 and C2 respectively, such that:}
-    \end{align*}
+\begin{frame}{Two-Thread Deadlock Condition}
+  \begin{block}{Deadlock Condition (2 Threads)}
+    For two threads \(C_1\) and \(C_2\):
     \[
-    \ell1 \in X2 \quad and \quad \ell2 \in X1 \quad and \quad X1 \cap X2 = \emptyset
+      C_1 \,||\, C_2 \text{ deadlocks}
+      \iff \exists (X_1,\ell_1) \in \text{Crit}(C_1),
+                 (X_2,\ell_2) \in \text{Crit}(C_2)
+    \]
+    such that
+    \[
+      \ell_1 \in X_2,\quad \ell_2 \in X_1,\quad X_1 \cap X_2 = \emptyset.
     \]
   \end{block}
+  \begin{itemize}
+    \item Each thread holds a lock the other is trying to acquire.
+    \item The currently held lock sets do not overlap.
+    \item Generalises to arbitrarily many threads (Theorem 4.4 in the paper).
+  \end{itemize}
 \end{frame}
 
-\begin{frame}{Example of Critical Pairs}
-  \begin{exampleblock}{Example}
-    \vspace{0.3em}
-    Consider the two threads:
+\begin{frame}{Example: Classic Two-Thread Deadlock}
+  \begin{exampleblock}{Two Threads}
     \begin{align*}
-    C1: acq(x); acq(y); skip; rel(y); rel(x) \\
-    C2: acq(y); acq(x); skip; rel(x); rel(y)
-    \end{align*}
-    Their critical pairs are:
-    \begin{align*}
-    Crit(C1) = \{(\emptyset, x), (\{x\}, y)\} \\
-    Crit(C2) = \{(\emptyset, y), (\{y\}, x)\}
+      C_1 &: \; acq(x); acq(y); skip; rel(y); rel(x) \\
+      C_2 &: \; acq(y); acq(x); skip; rel(x); rel(y)
     \end{align*}
   \end{exampleblock}
-  Since \(x \in \{x\}\), \(y \in \{y\}\) and \(\{x\} \cap \{y\} = \emptyset\), the deadlock condition holds — \alert{deadlock!}
-
+  \vspace{-0.5em}
+  \begin{itemize}
+    \item Critical pairs:
+      \begin{align*}
+        \text{Crit}(C_1) &= \{ (\emptyset, x), (\{x\}, y) \} \\
+        \text{Crit}(C_2) &= \{ (\emptyset, y), (\{y\}, x) \}
+      \end{align*}
+    \item Take \((X_1,\ell_1) = (\{x\}, y)\) and \((X_2,\ell_2) = (\{y\}, x)\):
+      \begin{itemize}
+        \item \(\ell_1 = y \in X_2 = \{y\}\)
+        \item \(\ell_2 = x \in X_1 = \{x\}\)
+        \item \(X_1 \cap X_2 = \emptyset\)
+      \end{itemize}
+    \item Condition holds \(\Rightarrow\) \alert{deadlock is possible}.
+  \end{itemize}
 \end{frame}
 
-\begin{frame}{Example of Critical Pairs}
-  \begin{exampleblock}{Solution}
-    \vspace{0.3em}
-    Consider the two threads:
+\begin{frame}{Guard Locks: Breaking the Deadlock}
+  \begin{exampleblock}{Adding a Guard Lock}
     \begin{align*}
-    C1': acq(z); C1; rel(z) \\
-    C2': acq(z); C2; rel(z)
-    \end{align*}
-    Their critical pairs are:
-    \begin{align*}
-    Crit(C1') = \{(\emptyset, z), (\{z\}, x)\}, (\{z,x\}, y)\} \\
-    Crit(C2') = \{(\emptyset, z), (\{z\}, y)\}, (\{z,y\}, x)\}
+      C'_1 &= acq(z); C_1; rel(z) \\
+      C'_2 &= acq(z); C_2; rel(z)
     \end{align*}
   \end{exampleblock}
-  \vspace{-1em}
-  Since \(\{z,x\} \cap \{z,y\} = z\), the deadlock condition does not hold — \alert{no deadlock!} \\
-  \(z\) acts as a guard lock, preventing x and y from being accessed by C1' and C2' simultaneously.
+  \vspace{-0.5em}
+  \begin{itemize}
+    \item Now:
+      \begin{align*}
+        \text{Crit}(C'_1) &= \{ (\emptyset, z), (\{z\}, x), (\{z,x\}, y) \} \\
+        \text{Crit}(C'_2) &= \{ (\emptyset, z), (\{z\}, y), (\{z,y\}, x) \}
+      \end{align*}
+    \item Any potentially conflicting critical pairs share lock \(z\):
+      \[
+        \{z,x\} \cap \{z,y\} = \{z\} \neq \emptyset
+      \]
+    \item Deadlock condition fails \(\Rightarrow\) \alert{no deadlock}.
+    \item Intuition: \(z\) acts as a \emph{guard lock} protecting the region.
+  \end{itemize}
 \end{frame}
 
 % =========================================================
 \section{Concurrent Programs}
 % =========================================================
 
-\begin{frame}{Abstract Language}
+\begin{frame}{Abstract Language for Concurrency}
   \begin{itemize}
-    \item Simplified model of Java concurrency:
-    \begin{align*}
-      C ::= \texttt{skip} \mid \texttt{p()} \mid acq(\ell);C;rel(\ell) \mid \texttt{C;C} \\ \mid \texttt{if(*) then C else C} \mid \texttt{while(*) do C} \\
-    \end{align*}
-    \vspace{-3em}
-    \item This grammar guarantees balanced pairs of lock acquisitions/releases.
-    \item We consider only non-recursive procedures.
-    \item If $C$ is balanced, then so is body($p$) with $p \in$ callees(C).
-    \item A parallel program is an n-tuple of balanced statements \( C_1 \,||\, C_2 \,||\, ... \,||\, C_n \).
+    \item Abstracts away data and heap; focuses only on locks and control.
+    \item Statements \(C\) are built from:
+      \begin{align*}
+        C ::= &\ \texttt{skip} \mid p() \mid acq(\ell) \mid rel(\ell) \mid C;C \\
+              &\mid \texttt{if(*) then C else C} \mid \texttt{while(*) do C}
+      \end{align*}
+    \item \textbf{Balanced statements} enforce lock discipline:
+      \begin{itemize}
+        \item Locks must be released in LIFO order
+        \item Models scoped constructs like \texttt{synchronized} and \texttt{std::lock\_guard}
+      \end{itemize}
+    \item A parallel program is an \(n\)-tuple \(C_1 \,||\, \dots \,||\, C_n\).
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Lock States and Configurations}
+  \begin{itemize}
+    \item Locks are \textbf{re-entrant}:
+      \begin{itemize}
+        \item A thread can acquire the same lock multiple times
+        \item Lock state \(L : \text{Locks} \to \mathbb{N}\) counts acquisitions
+      \end{itemize}
+    \item We write \(\lfloor L \rfloor = \{ \ell \mid L(\ell) > 0 \}\) for held locks.
+    \item A configuration is a pair \(\langle C, L \rangle\):
+      \begin{itemize}
+        \item \(C\): current statement
+        \item \(L\): lock state
+      \end{itemize}
+    \item A concurrent configuration:
+      \[
+        \langle C_1 || \dots || C_n, (L_1,\dots,L_n) \rangle
+      \]
+      where each thread has its own lock state.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Deadlock Definition}
+  \begin{itemize}
+    \item Sequential step: \(\langle C, L \rangle \to \langle C', L' \rangle\).
+    \item Parallel step (rule \textsc{(par i)}): advance one thread, provided
+      it does not grab a lock already held by some other thread.
+    \item Intuitively, we are deadlocked when:
+      \begin{itemize}
+        \item Each thread can individually make a step (sequentially)
+        \item But no \emph{parallel} step is possible any more
+      \end{itemize}
+    \item Formal definition (simplified):
+      \begin{itemize}
+        \item A concurrent configuration is deadlocked if at least two threads
+              are stuck in this way.
+        \item A program deadlocks if some reachable configuration is deadlocked.
+      \end{itemize}
   \end{itemize}
 \end{frame}
 
@@ -212,48 +289,61 @@ holding the set of locks \(X\).
 \section{Program Execution Traces}
 % =========================================================
 
-
-\begin{frame}{Lock States}
-  \begin{itemize}
-    \item We treat locks as \textbf{re-entrant and scoped}.
-    \item A $lock$ $state$ is a function that maps each lock to its acquisition count.
-    \item A $configuration$ is a pair $\langle C,L \rangle$, where $C$ is a statement and $L$ is the lock state.
-    \item A $concurrent$ $configuration$ is then, a pair of the form $\langle C_1 || ... || C_n, (L_1, ..., L_n) \rangle$.
-  \end{itemize}
-\end{frame}
-
 \begin{frame}{Executions as Traces}
   \begin{itemize}
-    \item Executions can be represented as strings of lock
-          acquisitions/releases — e.g. `x y y x`.
-    \item Balanced programs produce \textbf{Dyck words} (well-nested parentheses).
-    \item Captures the essential locking behaviour.
-  \end{itemize}
-  \[
-  L(C) = \{\text{all possible lock traces of } C\}
-  \]
-\end{frame}
-
-\begin{frame}{Example Trace}
-  \begin{exampleblock}{Example}
-    \vspace{0.3em}
-    \texttt{acq(x); if(*) then acq(y); rel(y); else acq(z); rel(z); rel(x)}  
-    \[
-    L(C) = \{\, x y y x,\, x z z x \,\}
-    \]
-  \end{exampleblock}
-  \begin{itemize}
-    \item Balanced structure guarantees decidability.
-    \item Enables abstract reasoning about possible interleavings.
+    \item Each step either:
+      \begin{itemize}
+        \item Leaves the lock state unchanged
+        \item Acquires a lock \(\ell\)
+        \item Releases a lock \(\ell\)
+      \end{itemize}
+    \item We record only lock actions as a \textbf{trace} over alphabet \(\Sigma\):
+      \[
+        \Sigma = \{ \ell \mid \ell \in \text{Locks} \} \cup \{ \overline{\ell} \mid \ell \in \text{Locks} \}
+      \]
+    \item Example:
+      \begin{itemize}
+        \item Statement:
+          \texttt{acq(x); if(*) then acq(y); rel(y) else acq(z); rel(z); rel(x)}
+        \item Possible traces: \(x y \overline{y} \overline{x}\) and \(x z \overline{z} \overline{x}\)
+      \end{itemize}
   \end{itemize}
 \end{frame}
 
-\begin{frame}{Traces as Finite Automata}
+\begin{frame}{Dyck Words and Balanced Locking}
   \begin{itemize}
-    \item Each balanced statement can be viewed as a \textbf{finite automaton}
-          over lock actions.
-    \item Allows algorithmic computation of lock dependencies.
-    \item Provides the foundation for critical-pair analysis.
+    \item For balanced statements, traces are \textbf{Dyck words}:
+      \begin{itemize}
+        \item Well-parenthesised strings of opens and closes
+        \item Locks always released in reverse order of acquisition
+      \end{itemize}
+    \item Key property:
+      \begin{itemize}
+        \item For any balanced statement \(C\), all traces in \(L(C)\) are Dyck words.
+        \item Executions never underflow the lock stack.
+      \end{itemize}
+    \item This structure is crucial for the decidability and the critical-pair
+          characterisation of deadlocks.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Languages of Statements}
+  \begin{itemize}
+    \item Each statement \(C\) defines a language \(L(C) \subseteq \Sigma^\star\):
+      \begin{itemize}
+        \item All traces of possible executions of \(C\)
+      \end{itemize}
+    \item Defined inductively:
+      \begin{align*}
+        L(\texttt{skip}) &= \{\varepsilon\} &
+        L(p()) &= L(\text{body}(p)) \\
+        L(acq(\ell)) &= \{\ell\} &
+        L(rel(\ell)) &= \{\overline{\ell}\} \\
+        L(C_1;C_2) &= L(C_1) \cdot L(C_2) &
+        L(\texttt{if(*) then } C_1 \texttt{ else } C_2) &= L(C_1) \cup L(C_2) \\
+        L(\texttt{while(*) do } C) &= L(C)^\ast
+      \end{align*}
+    \item For balanced \(C\), \(L(C)\) is regular and consists of Dyck words.
   \end{itemize}
 \end{frame}
 
@@ -261,83 +351,97 @@ holding the set of locks \(X\).
 \section{Soundness and Completeness}
 % =========================================================
 
-\begin{frame}{Deadlock Characterisation}
-  \begin{block}{Critical Pair}
-    \vspace{0.3em}
-    \((X, \ell)\): some execution acquires lock \(\ell\)
-    while holding all locks in \(X\).
+\begin{frame}{Critical Pairs: Formal Definition}
+  \begin{block}{Critical Pairs of a Statement}
+    For a balanced statement \(C\):
+    \[
+      \text{Crit}(C) = \{ (\lfloor \langle u \rangle \rfloor, \ell)
+      \mid \exists v.\; u \ell v \in L(C) \ \text{and}\ \ell \notin \lfloor \langle u \rangle \rfloor \}
+    \]
+    where \(\langle u \rangle\) is the cumulative lock effect of trace \(u\).
   \end{block}
   \begin{itemize}
-    \item Captures possible lock dependencies.
-    \item Computed for each sequential thread.
+    \item This is equivalent to: \emph{there exists an execution that acquires \(\ell\)
+          while holding exactly \(X\)}.
+    \item The paper shows the execution-based and language-based definitions coincide.
   \end{itemize}
 \end{frame}
 
-\begin{frame}{Key Theorem (Simplified)}
-  \begin{block}{Theorem 4.4 — Deadlock Condition}
-    \vspace{0.3em}
-    Program \( C_1 || ... || C_n \) deadlocks  
-    iff there exist critical pairs \((X_i, \ell_i)\) s.t.
+\begin{frame}{Deadlock Characterisation Theorem}
+  \begin{block}{Theorem 4.4 (Simplified)}
+    A parallel program \(C_1 || \dots || C_n\) deadlocks
+    iff there exists an index set \(I \subseteq \{1,\dots,n\}\) with \(|I| \ge 2\)
+    and critical pairs \((X_i,\ell_i) \in \text{Crit}(C_i)\) for each \(i \in I\) such that:
     \[
-      \ell_i \in \bigcup_{j \neq i} X_j
-      \quad \text{and} \quad
       X_i \cap \bigcup_{j \neq i} X_j = \emptyset
+      \quad\text{and}\quad
+      \ell_i \in \bigcup_{j \neq i} X_j \quad \text{for all } i \in I.
     \]
   \end{block}
-  \vspace{0.5em}
-  \textbf{Intuition:} Each thread holds a lock another needs.
-\end{frame}
-
-\begin{frame}{Illustrative Example}
-  \begin{exampleblock}{Two-Thread Example}
-    \vspace{0.3em}
-  \texttt{C1: acq(x); acq(y); rel(y); rel(x)}  
-  \texttt{C2: acq(y); acq(x); rel(x); rel(y)}
-  \end{exampleblock}
-  \[
-  \begin{aligned}
-  \text{Crit(C1)} &= \{(\emptyset, x), (\{x\}, y)\} \\
-  \text{Crit(C2)} &= \{(\emptyset, y), (\{y\}, x)\}
-  \end{aligned}
-  \]
-  Since \(x \in \{y\}\) and \(y \in \{x\}\), the condition holds — \alert{deadlock!}
-\end{frame}
-
-\begin{frame}{Proof Structure}
   \begin{itemize}
-    \item Define executions $\rightarrow$ and parallel composition.
-    \item Show equivalence between execution semantics and trace semantics.
-    \item Prove critical-pair condition is \textbf{sound} (no missed deadlocks) and
-          \textbf{complete} (no spurious ones).
+    \item Each thread holds locks needed by the others.
+    \item Held-lock sets are pairwise disjoint.
+    \item This condition is both \textbf{sound} and \textbf{complete}.
   \end{itemize}
-  \begin{block}{Result}
-    \vspace{0.3em}
-    Existence of deadlock $\Leftrightarrow$ conflict between critical pairs.
-  \end{block}
+\end{frame}
+
+\begin{frame}{Proof Idea (Very High Level)}
+  \begin{itemize}
+    \item Direction \((\Rightarrow)\) (deadlock \(\Rightarrow\) critical-pair conflict):
+      \begin{itemize}
+        \item Start from a deadlocked configuration.
+        \item Project onto each thread and analyse the last lock acquisition step.
+        \item Show that the corresponding lock states form the required \(X_i\).
+      \end{itemize}
+    \item Direction \((\Leftarrow)\) (critical-pair conflict \(\Rightarrow\) deadlock):
+      \begin{itemize}
+        \item Assume such critical pairs exist.
+        \item Construct executions for each thread that reach the corresponding states.
+        \item Use a scheduling argument to show a global deadlocked configuration exists.
+      \end{itemize}
+    \item Balanced locking and Dyck-word reasoning are crucial in both directions.
+  \end{itemize}
 \end{frame}
 
 % =========================================================
 \section{Complexity}
 % =========================================================
 
-\begin{frame}{Computing Critical Pairs}
+\begin{frame}{Computing Critical Pairs Compositionally}
   \begin{itemize}
-    \item Recursive equations (C1–C6) compute \texttt{Crit(C)} compositionally.
-    \item Each construct (if, while, seq) has a local combination rule.
-    \item \textbf{Example:}
-      \[
-        \text{Crit(acq($\ell$); C; rel($\ell$))} =
-        \{(\emptyset, \ell)\} \cup \{(X\cup\{\ell\}, \ell') \mid (X,\ell')\in \text{Crit(C)}\}
-      \]
+    \item The paper gives equations (C1)--(C6) describing \(\text{Crit}(C)\)
+          \emph{by syntax} of \(C\).
+    \item Examples:
+      \begin{align*}
+        \text{Crit}(\texttt{skip}) &= \emptyset \\
+        \text{Crit}(p()) &= \text{Crit}(\text{body}(p)) \\[0.4em]
+        \text{Crit}(C;C') &= \text{Crit}(C) \cup \text{Crit}(C') \\
+        \text{Crit}(\texttt{if(*) then } C \texttt{ else } C') &=
+          \text{Crit}(C) \cup \text{Crit}(C') \\[0.4em]
+        \text{Crit}(acq(\ell);C;rel(\ell)) &=
+          \{(\emptyset,\ell)\} \cup \{(X \cup \{\ell\},\ell') \mid (X,\ell') \in \text{Crit}(C),\ \ell' \neq \ell \}
+      \end{align*}
+    \item These identities allow a bottom-up computation of \(\text{Crit}(C)\).
   \end{itemize}
 \end{frame}
 
-\begin{frame}{Complexity Results}
+\begin{frame}{Complexity Bounds}
   \begin{itemize}
-    \item \textbf{Finite and computable}: $\text{Crit}(C)$ always finite.
-    \item Deadlock detection problem is \textbf{decidable} and in NP.
-    \item Non-recursive programs $\Rightarrow$ quadratic time.
-    \item With procedures $\Rightarrow$ quasi-exponential.
+    \item \textbf{Finite} and \textbf{computable}:
+      \begin{itemize}
+        \item For any balanced \(C\), \(\text{Crit}(C)\) is finite.
+      \end{itemize}
+    \item Complexity of deadlock detection (Theorem 5.5):
+      \begin{itemize}
+        \item The deadlock problem for this language is \textbf{decidable} and lies in \textbf{NP}.
+        \item Idea: nondeterministically guess a set of threads and critical pairs,
+              then check the deadlock condition in polynomial time.
+      \end{itemize}
+    \item For programs without procedure calls:
+      \begin{itemize}
+        \item Computing \(\text{Crit}(C)\) is polynomial in program size.
+      \end{itemize}
+    \item Lower bounds (e.g.\ NP-completeness) are left as future work.
   \end{itemize}
 \end{frame}
 
@@ -345,51 +449,57 @@ holding the set of locks \(X\).
 \section{Implementation}
 % =========================================================
 
-\begin{frame}{Implementation Overview}
+\begin{frame}{Core Abstract Interpretation}
   \begin{itemize}
-    \item Implemented as an \textbf{abstract interpretation} within INFER.
-    \item Computes method summaries: critical pairs + thread identity.
-    \item Compositionally reuses summaries of unchanged methods.
-  \end{itemize}
-  \begin{block}{Core Idea}
-    \vspace{0.3em}
-    Analyse only modified methods and their dependents.
-  \end{block}
-\end{frame}
-
-\begin{frame}{Abstract State Representation}
-  \[
-  \alpha = \langle L, Z \rangle
-  \quad\text{where}\quad
-  L = \text{lock state},\;
-  Z = \text{set of critical pairs}
-  \]
-  \begin{itemize}
-    \item Join operation: \( \langle L, Z_1 \rangle \sqcup \langle L, Z_2 \rangle = \langle L, Z_1 \cup Z_2 \rangle \)
-    \item Each command updates this abstract state.
+    \item Implementation is an abstract interpretation that computes critical pairs.
+    \item Abstract state:
+      \[
+        \alpha = \langle L, Z \rangle
+      \]
+      where
+      \begin{itemize}
+        \item \(L\): abstract lock state
+        \item \(Z\): set of (approximate) critical pairs
+      \end{itemize}
+    \item Each command \(C\) defines a transformer $\llbracket C \rrbracket(\alpha)$.
+    \item The join operation on states:
+      \[
+        \langle L, Z_1 \rangle \sqcup \langle L, Z_2 \rangle
+        = \langle L, Z_1 \cup Z_2 \rangle
+      \]
   \end{itemize}
 \end{frame}
 
-\begin{frame}{Compositionality}
+\begin{frame}{Compositionality of the Analysis}
   \begin{itemize}
-    \item Procedure call depends only on:
-    \begin{enumerate}
-      \item Current abstract state.
-      \item Precomputed summary of the callee.
-    \end{enumerate}
-    \item Enables incremental reanalysis — ideal for CI/CD.
+    \item Procedure calls are handled via \textbf{summaries}:
+      \begin{itemize}
+        \item For each procedure \(p\) we precompute \(\text{Crit}(\text{body}(p))\).
+        \item At a call \(p()\), we combine the current state with \(p\)'s summary.
+      \end{itemize}
+    \item Consequences:
+      \begin{itemize}
+        \item When code changes, only affected procedures and their callers need re-analysis.
+        \item Most of the program can be reused from previous runs.
+        \item This is essential for deployment in continuous integration.
+      \end{itemize}
   \end{itemize}
-  \[
-    \texttt{Jp()K⟨L,Z⟩ = ⟨L, Z U f(L, Crit(body(p)))⟩}
-  \]
 \end{frame}
 
-\begin{frame}{Analysis for Android Java}
+\begin{frame}{Adapting to Android Java}
   \begin{itemize}
-    \item \textbf{Balanced locking}: uses \texttt{synchronized}.
-    \item \textbf{Partial path sensitivity}: e.g., for \texttt{tryLock()} and UI threads.
-    \item \textbf{Lock naming:} access-path abstraction (\texttt{this.f.g}, etc.).
-    \item \textbf{Thread inference:} uses annotations like \texttt{@UiThread}.
+    \item The abstract language is mapped to real Java/Android code:
+      \begin{itemize}
+        \item \texttt{synchronized} methods/blocks \(\Rightarrow\) balanced lock regions
+        \item Re-entrant monitors modelled as nested acquisitions
+      \end{itemize}
+    \item Android-specific refinements:
+      \begin{itemize}
+        \item Partial path-sensitivity for methods like \texttt{tryLock()} and UI-thread checks
+        \item Lock naming via access-paths (\texttt{this.f.g}, etc.)
+        \item Thread identity domain (\texttt{@UiThread}, \texttt{@WorkerThread}, background)
+      \end{itemize}
+    \item Implemented as the \texttt{starvation} analyser inside \texttt{INFER}.
   \end{itemize}
 \end{frame}
 
@@ -397,21 +507,54 @@ holding the set of locks \(X\).
 \section{Deployment and Results}
 % =========================================================
 
-\begin{frame}{Industrial Deployment}
+\begin{frame}{Integration in Facebook's CI}
   \begin{itemize}
-    \item Deployed as part of Facebook’s \textbf{continuous integration system}.
-    \item Runs automatically on every Android commit.
-    \item Appears as an automated “reviewer” commenting on potential deadlocks.
+    \item \texttt{INFER} is part of Facebook's continuous integration:
+      \begin{itemize}
+        \item Every Android commit triggers static analyses, including deadlock analysis.
+        \item The analyser appears as an automated reviewer on code reviews.
+      \end{itemize}
+    \item The deadlock analysis targets \textbf{code changes}, not whole apps:
+      \begin{itemize}
+        \item Summarise modified methods and their dependents
+        \item Use heuristics to find relevant methods that share locks
+      \end{itemize}
   \end{itemize}
 \end{frame}
 
-\begin{frame}{Results and Impact}
+\begin{frame}{Quantitative Impact}
   \begin{itemize}
-    \item Deployed for \textbf{2+ years} on all Android commits.
-    \item \textbf{500+} deadlock reports issued.
-    \item \textbf{54\%} of reports fixed by developers.
-    \item Median runtime (all analyses): \textbf{90 s per commit}.
-    \item Analyses \textbf{2k–5k methods per commit}.
+    \item Deployed on all Android commits for \(\sim\)2 years.
+    \item Scale:
+      \begin{itemize}
+        \item Hundreds of thousands of commits analysed
+        \item Typically \(2\text{k} - 5\text{k}\) methods per commit
+      \end{itemize}
+    \item Performance:
+      \begin{itemize}
+        \item Median total analysis time \(\approx 90\) seconds per commit
+      \end{itemize}
+    \item Effectiveness:
+      \begin{itemize}
+        \item 500+ deadlock reports issued
+        \item \(\sim 54\%\) of these reports were fixed by developers
+      \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Practical Considerations}
+  \begin{itemize}
+    \item The tool optimises for \textbf{actionability}, not pure soundness:
+      \begin{itemize}
+        \item Prefers fewer, high-quality warnings
+        \item Accepts some false negatives to keep the noise low
+      \end{itemize}
+    \item Some non-fixed reports:
+      \begin{itemize}
+        \item May still be real bugs (fixed elsewhere or considered low priority)
+        \item Some are false positives (e.g.\ infeasible concurrency patterns)
+      \end{itemize}
+    \item Overall: evidence that the analysis finds real, impactful bugs at scale.
   \end{itemize}
 \end{frame}
 
@@ -419,28 +562,42 @@ holding the set of locks \(X\).
 \section{Conclusion and Related Work}
 % =========================================================
 
-\begin{frame}{Related Work}
+\begin{frame}{Related Work (Very Brief)}
   \begin{itemize}
-    \item Builds on automata-theoretic analyses of \textbf{pushdown systems}.
-    \item Compared to prior tools:
+    \item \textbf{Automata-theoretic} approaches:
       \begin{itemize}
-        \item Compositional, not whole-program.
-        \item Targets balanced re-entrant locks.
-        \item Prioritizes \textbf{actionable results} over completeness.
+        \item Communicating pushdown systems, nested locks, LTL model checking
+      \end{itemize}
+    \item \textbf{Static analyses} for deadlocks:
+      \begin{itemize}
+        \item Path-insensitive and path-sensitive tools for Java and C
+        \item Often whole-program and non-compositional
+      \end{itemize}
+    \item \textbf{Dynamic and hybrid} techniques:
+      \begin{itemize}
+        \item Runtime monitoring, lock-order graphs, concolic execution
+      \end{itemize}
+    \item This paper:
+      \begin{itemize}
+        \item Places a compositional static analysis with strong theory into this landscape
+        \item Focuses on large-scale industrial deployment
       \end{itemize}
   \end{itemize}
 \end{frame}
 
-\begin{frame}{Conclusion}
+\begin{frame}{Takeaways and Future Work}
   \begin{itemize}
-    \item Developed a \textbf{sound and complete} compositional analysis.
-    \item Scales to tens of millions of lines.
-    \item Successfully deployed in industry with tangible impact.
-    \item Formalized and proven in \textbf{Coq (8.7k LOC)}.
+    \item A new, \textbf{critical-pair based} characterisation of deadlocks for a balanced lock language.
+    \item Deadlock detection in this setting is \textbf{decidable} and in \textbf{NP}.
+    \item A compositional implementation scaled to tens of millions of LoC in production.
+    \item \textbf{Formalisation}: full development mechanised in Coq (\(\sim 8.7\text{k}\) LOC).
   \end{itemize}
-  \begin{block}{Future Work}
-    \vspace{0.3em}
-    Extend to recursive calls, deterministic control, and nested parallelism.
+  \begin{block}{Future Directions}
+    \begin{itemize}
+      \item Extend the theory to richer languages (recursion, deterministic guards, nested parallelism)
+      \item Sharpen complexity bounds (e.g.\ NP-completeness)
+      \item Explore similar compositional ideas for other concurrency bugs
+    \end{itemize}
   \end{block}
 \end{frame}
 
