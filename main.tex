@@ -119,7 +119,7 @@
   \end{itemize}
 \end{frame}
 
-\begin{frame}{Research Question and Contributions}
+\begin{frame}{Research Question}
   \begin{block}{Main Question}
     Can we design a \textbf{compositional} static analysis for \textbf{Android Java}
     that detects deadlocks in large codebases, with:
@@ -129,7 +129,9 @@
       \item A practical implementation integrated in CI
     \end{itemize}
   \end{block}
+  \end{frame}
 
+\begin{frame}{High-Level Contributions}
   \begin{block}{High-Level Contributions}
     \begin{itemize}
       \item Abstract language with balanced re-entrant locks and nondeterministic control
@@ -233,9 +235,8 @@
     \item Abstracts away data and heap; focuses only on locks and control.
     \item Statements \(C\) are built from:
       \begin{align*}
-        C ::= &\ \texttt{skip} \mid p() \mid acq(\ell) \mid rel(\ell) \mid C;C \\
-              &\mid \texttt{if(*) then C else C} \mid \texttt{while(*) do C}
-      \end{align*}
+      C ::= \texttt{skip} \mid \texttt{p()} \mid acq(\ell);C;rel(\ell) \mid \texttt{C;C} \\ \mid \texttt{if(*) then C else C} \mid \texttt{while(*) do C} \\
+    \end{align*}
     \item \textbf{Balanced statements} enforce lock discipline:
       \begin{itemize}
         \item Locks must be released in LIFO order
@@ -334,15 +335,27 @@
         \item All traces of possible executions of \(C\)
       \end{itemize}
     \item Defined inductively:
-      \begin{align*}
-        L(\texttt{skip}) &= \{\varepsilon\} &
-        L(p()) &= L(\text{body}(p)) \\
-        L(acq(\ell)) &= \{\ell\} &
-        L(rel(\ell)) &= \{\overline{\ell}\} \\
-        L(C_1;C_2) &= L(C_1) \cdot L(C_2) &
-        L(\texttt{if(*) then } C_1 \texttt{ else } C_2) &= L(C_1) \cup L(C_2) \\
-        L(\texttt{while(*) do } C) &= L(C)^\ast
-      \end{align*}
+    \begin{columns}[t]
+      \begin{column}{0.48\textwidth}
+        \[
+          \begin{aligned}
+            &\text{L}(\texttt{skip}) = \{\varepsilon\} \\
+            &\text{L}(p()) = \text{L}(\text{body}(p)) \\
+            &\text{L}(acq(\ell)) = \{\ell\} \\
+            &\text{L}(\texttt{if(*) then } C_1 \texttt{ else } C_2) = \text{L}(C_1) \cup \text{L}(C_2) \\
+          \end{aligned}
+        \]
+      \end{column}
+      \begin{column}{0.48\textwidth}
+        \[
+          \begin{aligned}
+            &\text{L}(rel(\ell)) = \{\overline{\ell}\} \\
+            &\text{L}(C_1;C_2) = \text{L}(C_1) \cdot \text{L}(C_2) \\
+            &\text{L}(\texttt{while(*) do } C) = \text{L}(C)^\ast
+          \end{aligned}
+        \]
+      \end{column}
+    \end{columns}
     \item For balanced \(C\), \(L(C)\) is regular and consists of Dyck words.
   \end{itemize}
 \end{frame}
@@ -413,14 +426,15 @@
           \emph{by syntax} of \(C\).
     \item Examples:
       \begin{align*}
-        \text{Crit}(\texttt{skip}) &= \emptyset \\
-        \text{Crit}(p()) &= \text{Crit}(\text{body}(p)) \\[0.4em]
-        \text{Crit}(C;C') &= \text{Crit}(C) \cup \text{Crit}(C') \\
-        \text{Crit}(\texttt{if(*) then } C \texttt{ else } C') &=
-          \text{Crit}(C) \cup \text{Crit}(C') \\[0.4em]
-        \text{Crit}(acq(\ell);C;rel(\ell)) &=
-          \{(\emptyset,\ell)\} \cup \{(X \cup \{\ell\},\ell') \mid (X,\ell') \in \text{Crit}(C),\ \ell' \neq \ell \}
-      \end{align*}
+&\text{Crit}(\texttt{skip}) = \emptyset \\
+&\text{Crit}(p()) = \text{Crit}(\text{body}(p)) \\[0.4em]
+&\text{Crit}(C;C') = \text{Crit}(C) \cup \text{Crit}(C') \\
+&\text{Crit}(\texttt{if(*) then } C \texttt{ else } C') = 
+\text{Crit}(C) \cup \text{Crit}(C') \\[0.4em]
+&\text{Crit}(acq(\ell);C;rel(\ell)) = \\
+&\{(\emptyset,\ell)\} \cup \{(X \cup \{\ell\},\ell') \mid (X,\ell') \in \text{Crit}(C),\ \ell' \neq \ell \}
+\end{align*}
+
     \item These identities allow a bottom-up computation of \(\text{Crit}(C)\).
   \end{itemize}
 \end{frame}
@@ -431,7 +445,7 @@
       \begin{itemize}
         \item For any balanced \(C\), \(\text{Crit}(C)\) is finite.
       \end{itemize}
-    \item Complexity of deadlock detection (Theorem 5.5):
+    \item Complexity of deadlock detection:
       \begin{itemize}
         \item The deadlock problem for this language is \textbf{decidable} and lies in \textbf{NP}.
         \item Idea: nondeterministically guess a set of threads and critical pairs,
@@ -562,21 +576,11 @@
 \section{Conclusion and Related Work}
 % =========================================================
 
-\begin{frame}{Related Work (Very Brief)}
+\begin{frame}{Related Work}
   \begin{itemize}
-    \item \textbf{Automata-theoretic} approaches:
-      \begin{itemize}
-        \item Communicating pushdown systems, nested locks, LTL model checking
-      \end{itemize}
-    \item \textbf{Static analyses} for deadlocks:
-      \begin{itemize}
-        \item Path-insensitive and path-sensitive tools for Java and C
-        \item Often whole-program and non-compositional
-      \end{itemize}
-    \item \textbf{Dynamic and hybrid} techniques:
-      \begin{itemize}
-        \item Runtime monitoring, lock-order graphs, concolic execution
-      \end{itemize}
+    \item \textbf{Automata-theoretic} approaches
+    \item \textbf{Static analyses} for deadlocks
+    \item \textbf{Dynamic and hybrid} techniques
     \item This paper:
       \begin{itemize}
         \item Places a compositional static analysis with strong theory into this landscape
@@ -585,13 +589,17 @@
   \end{itemize}
 \end{frame}
 
-\begin{frame}{Takeaways and Future Work}
+\begin{frame}{Takeaways}
   \begin{itemize}
     \item A new, \textbf{critical-pair based} characterisation of deadlocks for a balanced lock language.
     \item Deadlock detection in this setting is \textbf{decidable} and in \textbf{NP}.
     \item A compositional implementation scaled to tens of millions of LoC in production.
     \item \textbf{Formalisation}: full development mechanised in Coq (\(\sim 8.7\text{k}\) LOC).
   \end{itemize}
+
+\end{frame}
+
+\begin{frame}{Future Work}
   \begin{block}{Future Directions}
     \begin{itemize}
       \item Extend the theory to richer languages (recursion, deterministic guards, nested parallelism)
