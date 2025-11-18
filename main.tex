@@ -9,6 +9,7 @@
 % --- Custom styling ---
 \definecolor{AUred}{HTML}{9E1B32}
 \setbeamercolor{alerted text}{fg=AUred}
+\setbeamercolor{itemize item}{fg=black}
 \usetheme[progressbar=frametitle, sectionpage=progressbar]{metropolis}
 
 
@@ -43,6 +44,31 @@
 %=========================================================
 \section{Motivation}
 %=========================================================
+
+\begin{frame}{Deadlocks: A Refresher}
+  \begin{itemize}
+    \item A \textbf{deadlock} occurs when two or more threads are each
+          waiting for the other to release a lock — so none can make progress.
+
+    \begin{exampleblock}{Example (two threads, two locks)}
+      \[
+        \begin{array}{ll}
+          \text{Thread 1:} & \texttt{acq(x); acq(y);} \\
+          \text{Thread 2:} & \texttt{acq(y); acq(x);}
+        \end{array}
+      \]
+    \end{exampleblock}
+    \item One possible execution:
+      \begin{enumerate}
+        \item Thread 1 acquires \(x\)
+        \item Thread 2 acquires \(y\)
+        \item Thread 1 now waits for \(y\), Thread 2 waits for \(x\)
+      \end{enumerate}
+
+    \item Neither thread can continue $\Longrightarrow$ \alert{deadlock}.
+  \end{itemize}
+\end{frame}
+
 
 \begin{frame}{Why Deadlocks Matter}
   \begin{itemize}
@@ -121,6 +147,7 @@
 
 \begin{frame}{Research Question}
   \begin{block}{Main Question}
+    \vspace{0.1cm}
     Can we design a \textbf{compositional} static analysis for \textbf{Android Java}
     that detects deadlocks in large codebases, with:
     \begin{itemize}
@@ -148,6 +175,7 @@
 
 \begin{frame}{Intuition: Critical Pairs}
   \begin{block}{Critical Pair (Informal)}
+    \vspace{0.1cm}
     A \textbf{critical pair} of a thread is a pair \((X,\ell)\) such that
     some execution of the thread acquires an \emph{unheld} lock \(\ell\)
     while already holding exactly the set of locks \(X\).
@@ -159,9 +187,32 @@
   \end{itemize}
 \end{frame}
 
+\begin{frame}{Critical Pairs: A Simple Example}
+  \begin{block}{Statement}
+    \[
+      C = acq(x);\ acq(y);\ rel(y);\ rel(x)
+    \]
+  \end{block}
+
+  \begin{block}{Computing \(\text{Crit}(C)\)}
+    \[
+      \text{Crit}(C) = \{\, (\emptyset, x),\ (\{x\}, y) \,\}
+    \]
+
+    \begin{itemize}
+      \item At the first acquisition of \(x\): no locks held  
+            \(\Rightarrow (\emptyset, x)\)
+      \item Later, the thread holds \(\{x\}\) when acquiring \(y\)  
+            \(\Rightarrow (\{x\}, y)\)
+    \end{itemize}
+  \end{block}
+\end{frame}
+
+
 \begin{frame}{Two-Thread Deadlock Condition}
   \begin{block}{Deadlock Condition (2 Threads)}
-    For two threads \(C_1\) and \(C_2\):
+    \vspace{0.1cm}
+    For two statements \(C_1\) and \(C_2\) running concurrently:
     \[
       C_1 \,||\, C_2 \text{ deadlocks}
       \iff \exists (X_1,\ell_1) \in \text{Crit}(C_1),
@@ -237,6 +288,7 @@
       \begin{align*}
       C ::= \texttt{skip} \mid \texttt{p()} \mid acq(\ell);C;rel(\ell) \mid \texttt{C;C} \\ \mid \texttt{if(*) then C else C} \mid \texttt{while(*) do C} \\
     \end{align*}
+    \vspace{-1cm}
     \item \textbf{Balanced statements} enforce lock discipline:
       \begin{itemize}
         \item Locks must be released in LIFO order
@@ -245,6 +297,31 @@
     \item A parallel program is an \(n\)-tuple \(C_1 \,||\, \dots \,||\, C_n\).
   \end{itemize}
 \end{frame}
+
+\begin{frame}{Example Program in the Abstract Language}
+  \begin{exampleblock}{Example}
+    \[
+      C = acq(x);
+          (\texttt{if(*) then } acq(y); rel(y)
+          \texttt{ else skip});
+        rel(x)
+    \]
+  \end{exampleblock}
+
+  \begin{itemize}
+    \item This program:
+      \begin{itemize}
+        \item Always acquires and releases \(x\)
+        \item Nondeterministically either:
+          \begin{itemize}
+            \item acquires and releases \(y\), or
+            \item does nothing in the branch
+          \end{itemize}
+      \end{itemize}
+    \item Shows how nested acquisitions map to lock scopes in Java.
+  \end{itemize}
+\end{frame}
+
 
 \begin{frame}{Lock States and Configurations}
   \begin{itemize}
@@ -267,21 +344,36 @@
   \end{itemize}
 \end{frame}
 
-\begin{frame}{Deadlock Definition}
+\begin{frame}{Deadlock Definition (1)}
   \begin{itemize}
     \item Sequential step: \(\langle C, L \rangle \to \langle C', L' \rangle\).
-    \item Parallel step (rule \textsc{(par i)}): advance one thread, provided
-      it does not grab a lock already held by some other thread.
+      \begin{exampleblock}{Example} 
+        \[
+          \langle \texttt{acq(x);skip;rel(x)},\, L \rangle \;\to\; 
+          \langle \texttt{skip;rel(x)},\, L[x^{++}] \rangle
+        \]
+        (acquiring lock \(x\) increases its count)
+      \end{exampleblock}
+
+    \item Parallel step (rule \textsc{(par i)}): advance one thread,
+          provided it does not grab a lock already held by another thread.
+
     \item Intuitively, we are deadlocked when:
       \begin{itemize}
-        \item Each thread can individually make a step (sequentially)
+        \item Each thread can individually make a step (sequential)
         \item But no \emph{parallel} step is possible any more
       \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Deadlock Definition (2)}
+  \begin{itemize}
     \item Formal definition (simplified):
       \begin{itemize}
-        \item A concurrent configuration is deadlocked if at least two threads
-              are stuck in this way.
-        \item A program deadlocks if some reachable configuration is deadlocked.
+        \item A concurrent configuration is deadlocked if at least two
+              threads are stuck in this way.
+        \item A program deadlocks if some reachable configuration is
+              deadlocked.
       \end{itemize}
   \end{itemize}
 \end{frame}
@@ -302,14 +394,43 @@
       \[
         \Sigma = \{ \ell \mid \ell \in \text{Locks} \} \cup \{ \overline{\ell} \mid \ell \in \text{Locks} \}
       \]
-    \item Example:
-      \begin{itemize}
-        \item Statement:
-          \texttt{acq(x); if(*) then acq(y); rel(y) else acq(z); rel(z); rel(x)}
-        \item Possible traces: \(x y \overline{y} \overline{x}\) and \(x z \overline{z} \overline{x}\)
-      \end{itemize}
+      \vspace{-1cm}
+    \begin{exampleblock}{Example}
+      \end{exampleblock}
+  \begin{itemize}
+    \item  Statement:
+      \texttt{acq(x); if(*) then acq(y); rel(y) else acq(z); rel(z); rel(x)}
+    \item Possible traces: \(x y \overline{y} \overline{x}\) and \(x z \overline{z} \overline{x}\)
+  \end{itemize}
   \end{itemize}
 \end{frame}
+
+\begin{frame}{Executions as Traces (Examples)}
+  \begin{exampleblock}{Example Statement}
+    \[
+      C = acq(x); acq(y); rel(y); rel(x)
+    \]
+  \end{exampleblock}
+
+  \begin{itemize}
+    \item Valid trace:
+      \[
+        x\, y\, \overline{y}\, \overline{x}
+      \]
+    
+      Let us now consider:
+    \[
+      C' = acq(x); acq(y); rel(x); rel(y)
+    \]
+    \item Invalid trace (bad nesting):
+      \[
+        x\, y\, \overline{x}\, \overline{y}
+      \quad\Rightarrow\quad
+      \text{lock } x \text{ released while } y \text{ still held}
+      \]
+  \end{itemize}
+\end{frame}
+
 
 \begin{frame}{Dyck Words and Balanced Locking}
   \begin{itemize}
@@ -328,6 +449,40 @@
   \end{itemize}
 \end{frame}
 
+\begin{frame}{Dyck Words and Balanced Locking (Example)}
+  \begin{itemize}
+    \item For balanced statements, traces form \textbf{Dyck words}:
+      \begin{itemize}
+        \item Perfectly nested lock acquisitions / releases
+        \item The lock stack never underflows
+      \end{itemize}
+  \end{itemize}
+
+  \begin{exampleblock}{Valid Dyck Word}
+    \[
+      x\, y\, \overline{y}\, z\, \overline{z}\, \overline{x}
+    \]
+  \end{exampleblock}
+
+  \begin{itemize}
+    \item Corresponds to nested Acquire–Release behaviour:
+      \[
+        acq(x);\; acq(y);\; rel(y);\; acq(z);\; rel(z);\; rel(x)
+      \]
+  \end{itemize}
+
+  \begin{exampleblock}{Invalid Word}
+    \[
+      x\, y\, \overline{x}\, \overline{y}
+    \]
+  \end{exampleblock}
+
+  \begin{itemize}
+    \item Releases \(x\) before \(y\): violates LIFO discipline.
+  \end{itemize}
+\end{frame}
+
+
 \begin{frame}{Languages of Statements}
   \begin{itemize}
     \item Each statement \(C\) defines a language \(L(C) \subseteq \Sigma^\star\):
@@ -335,6 +490,7 @@
         \item All traces of possible executions of \(C\)
       \end{itemize}
     \item Defined inductively:
+    \vspace{-0.5cm}
     \begin{columns}[t]
       \begin{column}{0.48\textwidth}
         \[
@@ -356,6 +512,7 @@
         \]
       \end{column}
     \end{columns}
+    \vspace{0.1cm}
     \item For balanced \(C\), \(L(C)\) is regular and consists of Dyck words.
   \end{itemize}
 \end{frame}
@@ -364,8 +521,50 @@
 \section{Soundness and Completeness}
 % =========================================================
 
+\begin{frame}{Cumulative Lock Effect of a Trace}
+  \begin{itemize}
+    \item For a trace \(u \in \Sigma^\ast\),  
+          \(\langle u \rangle\) denotes its \textbf{cumulative lock effect}:
+      \begin{itemize}
+        \item Start from the empty lock multiset
+        \item Read actions in \(u\) left to right
+        \item Each \(x\) increments the count of lock \(x\)
+        \item Each \(\overline{x}\) decrements the count of lock \(x\)
+      \end{itemize}
+
+    \vspace{0.5em}
+
+    \item The set of \emph{currently held locks} after reading \(u\) is:
+      \[
+        \lfloor \langle u \rangle \rfloor = \{\, \ell \mid \langle u \rangle(\ell) > 0 \,\}.
+      \]
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \begin{exampleblock}{Example}
+    \vspace{0.1cm}
+      Trace prefix: \(u = x\, y\, \overline{y}\)
+
+      \[
+      \begin{aligned}
+        \langle \varepsilon \rangle &= \emptyset \\
+        \langle x \rangle &= \{x\} \\
+        \langle x y \rangle &= \{x, y\} \\
+        \langle x y \overline{y} \rangle &= \{x\}
+      \end{aligned}
+      \]
+
+      So:
+      \[
+        \lfloor \langle u \rangle \rfloor = \{x\}.
+      \]
+    \end{exampleblock}
+\end{frame}
+
 \begin{frame}{Critical Pairs: Formal Definition}
   \begin{block}{Critical Pairs of a Statement}
+    \vspace{0.1cm}
     For a balanced statement \(C\):
     \[
       \text{Crit}(C) = \{ (\lfloor \langle u \rangle \rfloor, \ell)
@@ -380,8 +579,31 @@
   \end{itemize}
 \end{frame}
 
+\begin{frame}{Critical Pairs: Formal Definition (Example)}
+  \begin{exampleblock}{Example Trace}
+    \[
+      u\ell v = x\, y\, z\, \overline{z}\, \overline{y}\, \overline{x}
+    \]
+  \end{exampleblock}
+
+  \begin{itemize}
+    \item Take \(u = x\, y\), \(\ell = z\):
+      \[
+        \langle u \rangle = \{x, y\}
+      \]
+    \item Since \(z \notin \{x, y\}\), acquiring \(z\) yields:
+      \[
+        (\{x, y\}, z) \in \text{Crit}(C)
+      \]
+    \item Meaning:  
+      During some execution, the thread acquires \(z\) while holding exactly \(\{x, y\}\).
+  \end{itemize}
+\end{frame}
+
+
 \begin{frame}{Deadlock Characterisation Theorem}
   \begin{block}{Theorem 4.4 (Simplified)}
+    \vspace{0.1cm}
     A parallel program \(C_1 || \dots || C_n\) deadlocks
     iff there exists an index set \(I \subseteq \{1,\dots,n\}\) with \(|I| \ge 2\)
     and critical pairs \((X_i,\ell_i) \in \text{Crit}(C_i)\) for each \(i \in I\) such that:
@@ -398,31 +620,13 @@
   \end{itemize}
 \end{frame}
 
-\begin{frame}{Proof Idea (Very High Level)}
-  \begin{itemize}
-    \item Direction \((\Rightarrow)\) (deadlock \(\Rightarrow\) critical-pair conflict):
-      \begin{itemize}
-        \item Start from a deadlocked configuration.
-        \item Project onto each thread and analyse the last lock acquisition step.
-        \item Show that the corresponding lock states form the required \(X_i\).
-      \end{itemize}
-    \item Direction \((\Leftarrow)\) (critical-pair conflict \(\Rightarrow\) deadlock):
-      \begin{itemize}
-        \item Assume such critical pairs exist.
-        \item Construct executions for each thread that reach the corresponding states.
-        \item Use a scheduling argument to show a global deadlocked configuration exists.
-      \end{itemize}
-    \item Balanced locking and Dyck-word reasoning are crucial in both directions.
-  \end{itemize}
-\end{frame}
-
 % =========================================================
 \section{Complexity}
 % =========================================================
 
 \begin{frame}{Computing Critical Pairs Compositionally}
   \begin{itemize}
-    \item The paper gives equations (C1)--(C6) describing \(\text{Crit}(C)\)
+    \item The paper gives 6 equations describing \(\text{Crit}(C)\)
           \emph{by syntax} of \(C\).
     \item Examples:
       \begin{align*}
@@ -546,7 +750,8 @@
       \end{itemize}
     \item Performance:
       \begin{itemize}
-        \item Median total analysis time \(\approx 90\) seconds per commit
+        \item Median analysis time of 90 seconds per commit
+        \item Average analysis time of 213 seconds per commit
       \end{itemize}
     \item Effectiveness:
       \begin{itemize}
