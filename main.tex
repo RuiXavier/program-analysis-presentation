@@ -48,7 +48,7 @@
 \begin{frame}{Deadlocks: A Refresher}
   \begin{itemize}
     \item A \textbf{deadlock} occurs when two or more threads are each
-          waiting for the other to release a lock — so none can make progress.
+          waiting for the other to release a lock, so none can make progress.
 
     \begin{exampleblock}{Example (two threads, two locks)}
       \[
@@ -307,6 +307,7 @@
         rel(x)
     \]
   \end{exampleblock}
+  \vspace{-0.5cm}
 
   \begin{itemize}
     \item This program:
@@ -355,7 +356,7 @@
         (acquiring lock \(x\) increases its count)
       \end{exampleblock}
 
-    \item Parallel step (rule \textsc{(par i)}): advance one thread,
+    \item Parallel step: advance one thread,
           provided it does not grab a lock already held by another thread.
 
     \item Intuitively, we are deadlocked when:
