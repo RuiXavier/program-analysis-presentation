@@ -170,6 +170,109 @@
 \end{frame}
 
 % =========================================================
+\section{Concurrent Programs}
+% =========================================================
+
+\begin{frame}{Abstract Language for Concurrency}
+  \begin{itemize}
+    \item Abstracts away data and heap; focuses only on locks and control.
+    \item Statements \(C\) are built from:
+      \begin{align*}
+      C ::= \texttt{skip} \mid \texttt{p()} \mid acq(\ell);C;rel(\ell) \mid \texttt{C;C} \\ \mid \texttt{if(*) then C else C} \mid \texttt{while(*) do C} \\
+    \end{align*}
+    \vspace{-1cm}
+    \item \textbf{Balanced statements} enforce lock discipline:
+      \begin{itemize}
+        \item Locks must be released in LIFO order
+        \item Models scoped constructs like \texttt{synchronized} and \texttt{std::lock\_guard}
+      \end{itemize}
+    \item A parallel program is an \(n\)-tuple \(C_1 \,||\, \dots \,||\, C_n\).
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Example Program in the Abstract Language}
+  \begin{exampleblock}{Example}
+    \[
+      C = acq(x);
+          (\texttt{if(*) then } acq(y); rel(y)
+          \texttt{ else skip});
+        rel(x)
+    \]
+  \end{exampleblock}
+  \vspace{-0.5cm}
+
+  \begin{itemize}
+    \item This program:
+      \begin{itemize}
+        \item Always acquires and releases \(x\)
+        \item Nondeterministically either:
+          \begin{itemize}
+            \item acquires and releases \(y\), or
+            \item does nothing in the branch
+          \end{itemize}
+      \end{itemize}
+    \item Shows how nested acquisitions map to lock scopes in Java.
+  \end{itemize}
+\end{frame}
+
+
+\begin{frame}{Lock States and Configurations}
+  \begin{itemize}
+    \item Locks are \textbf{re-entrant}:
+      \begin{itemize}
+        \item A thread can acquire the same lock multiple times
+        \item Lock state \(L : \text{Locks} \to \mathbb{N}\) counts acquisitions
+      \end{itemize}
+    \item We write \(\lfloor L \rfloor = \{ \ell \mid L(\ell) > 0 \}\) for held locks.
+    \item A configuration is a pair \(\langle C, L \rangle\):
+      \begin{itemize}
+        \item \(C\): current statement
+        \item \(L\): lock state
+      \end{itemize}
+    \item A concurrent configuration:
+      \[
+        \langle C_1 || \dots || C_n, (L_1,\dots,L_n) \rangle
+      \]
+      where each thread has its own lock state.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Deadlock Definition (1)}
+  \begin{itemize}
+    \item Sequential step: \(\langle C, L \rangle \to \langle C', L' \rangle\).
+      \begin{exampleblock}{Example} 
+        \[
+          \langle \texttt{acq(x);skip;rel(x)},\, L \rangle \;\to\; 
+          \langle \texttt{skip;rel(x)},\, L[x{++}] \rangle
+        \]
+        (acquiring lock \(x\) increases its count)
+      \end{exampleblock}
+
+    \item Parallel step: advance one thread,
+          provided it does not grab a lock already held by another thread.
+
+    \item Intuitively, we are deadlocked when:
+      \begin{itemize}
+        \item Each thread can individually make a step (sequential)
+        \item But no \emph{parallel} step is possible any more
+      \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Deadlock Definition (2)}
+  \begin{itemize}
+    \item Formal definition (simplified):
+      \begin{itemize}
+        \item A concurrent configuration is deadlocked if at least two
+              threads are stuck in this way.
+        \item A program deadlocks if some reachable configuration is
+              deadlocked.
+      \end{itemize}
+  \end{itemize}
+\end{frame}
+
+
+% =========================================================
 \section{Critical Pairs and Deadlock Detection}
 % =========================================================
 
@@ -274,108 +377,6 @@
       \]
     \item Deadlock condition fails \(\Rightarrow\) \alert{no deadlock}.
     \item Intuition: \(z\) acts as a \emph{guard lock} protecting the region.
-  \end{itemize}
-\end{frame}
-
-% =========================================================
-\section{Concurrent Programs}
-% =========================================================
-
-\begin{frame}{Abstract Language for Concurrency}
-  \begin{itemize}
-    \item Abstracts away data and heap; focuses only on locks and control.
-    \item Statements \(C\) are built from:
-      \begin{align*}
-      C ::= \texttt{skip} \mid \texttt{p()} \mid acq(\ell);C;rel(\ell) \mid \texttt{C;C} \\ \mid \texttt{if(*) then C else C} \mid \texttt{while(*) do C} \\
-    \end{align*}
-    \vspace{-1cm}
-    \item \textbf{Balanced statements} enforce lock discipline:
-      \begin{itemize}
-        \item Locks must be released in LIFO order
-        \item Models scoped constructs like \texttt{synchronized} and \texttt{std::lock\_guard}
-      \end{itemize}
-    \item A parallel program is an \(n\)-tuple \(C_1 \,||\, \dots \,||\, C_n\).
-  \end{itemize}
-\end{frame}
-
-\begin{frame}{Example Program in the Abstract Language}
-  \begin{exampleblock}{Example}
-    \[
-      C = acq(x);
-          (\texttt{if(*) then } acq(y); rel(y)
-          \texttt{ else skip});
-        rel(x)
-    \]
-  \end{exampleblock}
-  \vspace{-0.5cm}
-
-  \begin{itemize}
-    \item This program:
-      \begin{itemize}
-        \item Always acquires and releases \(x\)
-        \item Nondeterministically either:
-          \begin{itemize}
-            \item acquires and releases \(y\), or
-            \item does nothing in the branch
-          \end{itemize}
-      \end{itemize}
-    \item Shows how nested acquisitions map to lock scopes in Java.
-  \end{itemize}
-\end{frame}
-
-
-\begin{frame}{Lock States and Configurations}
-  \begin{itemize}
-    \item Locks are \textbf{re-entrant}:
-      \begin{itemize}
-        \item A thread can acquire the same lock multiple times
-        \item Lock state \(L : \text{Locks} \to \mathbb{N}\) counts acquisitions
-      \end{itemize}
-    \item We write \(\lfloor L \rfloor = \{ \ell \mid L(\ell) > 0 \}\) for held locks.
-    \item A configuration is a pair \(\langle C, L \rangle\):
-      \begin{itemize}
-        \item \(C\): current statement
-        \item \(L\): lock state
-      \end{itemize}
-    \item A concurrent configuration:
-      \[
-        \langle C_1 || \dots || C_n, (L_1,\dots,L_n) \rangle
-      \]
-      where each thread has its own lock state.
-  \end{itemize}
-\end{frame}
-
-\begin{frame}{Deadlock Definition (1)}
-  \begin{itemize}
-    \item Sequential step: \(\langle C, L \rangle \to \langle C', L' \rangle\).
-      \begin{exampleblock}{Example} 
-        \[
-          \langle \texttt{acq(x);skip;rel(x)},\, L \rangle \;\to\; 
-          \langle \texttt{skip;rel(x)},\, L[x^{++}] \rangle
-        \]
-        (acquiring lock \(x\) increases its count)
-      \end{exampleblock}
-
-    \item Parallel step: advance one thread,
-          provided it does not grab a lock already held by another thread.
-
-    \item Intuitively, we are deadlocked when:
-      \begin{itemize}
-        \item Each thread can individually make a step (sequential)
-        \item But no \emph{parallel} step is possible any more
-      \end{itemize}
-  \end{itemize}
-\end{frame}
-
-\begin{frame}{Deadlock Definition (2)}
-  \begin{itemize}
-    \item Formal definition (simplified):
-      \begin{itemize}
-        \item A concurrent configuration is deadlocked if at least two
-              threads are stuck in this way.
-        \item A program deadlocks if some reachable configuration is
-              deadlocked.
-      \end{itemize}
   \end{itemize}
 \end{frame}
 
@@ -734,6 +735,7 @@
         \item The analyser appears as an automated reviewer on code reviews.
       \end{itemize}
     \item The deadlock analysis targets \textbf{code changes}, not whole apps:
+    \vspace{-0.4cm}
       \begin{itemize}
         \item Summarise modified methods and their dependents
         \item Use heuristics to find relevant methods that share locks
@@ -813,6 +815,27 @@
       \item Explore similar compositional ideas for other concurrency bugs
     \end{itemize}
   \end{block}
+\end{frame}
+
+\section{Pros and Cons}
+
+\begin{frame}{Pros}
+\begin{itemize}
+    \item Achieves a balance between solid theory and real industrial deployment.
+    \item Compositionality is not only formal but practical in CI workflows.
+    \item Critical pairs provide compact, human-interpretable summaries of thread behaviour.
+    \item Abstraction is stable across code evolution, making the analysis maintainable long-term.
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Cons}
+\begin{itemize}
+    \item Compositionality may miss multi-layer deadlocks spread across the call graph (false negatives).
+    \item Strong reliance on balanced locking assumptions; custom sync patterns break the model.
+    \item The first full-program analysis remains expensive despite good per-commit performance.
+    \item The reported statistics aggregate all categories of deadlock reports; separating them would clarify how many were real bugs, low-priority issues, or false positives.
+    \item The evaluation reports total CI analysis time, but does not isolate the cost of \emph{this} analyser, making its standalone overhead harder to assess.
+\end{itemize}
 \end{frame}
 
 \begin{frame}[standout]
